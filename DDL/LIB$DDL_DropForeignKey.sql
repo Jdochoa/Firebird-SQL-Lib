@@ -1,19 +1,18 @@
 /******************************************************************************
-* Stored Procedure : LIB$DDL_DropUnq
+* Stored Procedure : LIB$DDL_DropForeignKey
 *
-* Date    : 2017-09-18
+* Date    : 2018-10-24 
 * Author  : Slavomir Skopalik
-* Server  : Firebird 2.5.7
-* Purpose : Drop all unique constraint on given column
+* Server  : Firebird 2.5.9
+* Purpose : Drop Foreign Key for given table and field
 *
 * Revision History
 * ================
-* 2018-10-24 - S.Skopalik   Added restriction NOT NULL for input parameters
-* 2020-10-10 - S.Skopalik   Added option to do not raise exception 
+* 
 ******************************************************************************/
-SET TERM ^;
 
-CREATE OR ALTER PROCEDURE LIB$DDL_DropUnq(Relation RDB$Relation_Name NOT NULL, Field RDB$Field_Name NOT NULL, Exe Lib$BooleanF DEFAULT 0, NoExceptions Lib$BooleanF DEFAULT 0)
+SET TERM ^;
+CREATE OR ALTER PROCEDURE LIB$DDL_DropForeignKey(Relation RDB$Relation_Name NOT NULL, Field RDB$Field_Name NOT NULL, Exe Lib$BooleanF DEFAULT 0)
   RETURNS(SQL VARCHAR(512))
 AS
 DECLARE VARIABLE cn VARCHAR(500)=NULL;
@@ -23,7 +22,7 @@ BEGIN
     FROM RDB$INDICES I
     LEFT JOIN RDB$INDEX_SEGMENTS S ON S.rdb$index_name=I.rdb$index_name
     LEFT JOIN RDB$RELATION_CONSTRAINTS C ON C.rdb$index_name=I.rdb$index_name
-    WHERE I.RDB$RELATION_NAME = :Relation AND C.RDB$CONSTRAINT_TYPE='UNIQUE'
+    WHERE I.RDB$RELATION_NAME = :Relation AND C.RDB$CONSTRAINT_TYPE='FOREIGN KEY'
     AND S.rdb$field_name = :Field
     INTO :consName
     DO BEGIN
@@ -33,10 +32,8 @@ BEGIN
       END
       SUSPEND;
   END
-  IF(consName IS NULL AND NoExceptions = 0)THEN 
-    EXCEPTION LIB$DDL_Exception 'Cannot found unique constrant(s) for table('||TRIM(Relation)||') and field('||TRIM(Field)||')';
+  IF(consName IS NULL) THEN EXCEPTION LIB$DDL_Exception 'Cannot fond FK for table('||TRIM(Relation)||') and field('||Field||')';
 END
 ^
-
 SET TERM ;^
 
