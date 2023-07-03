@@ -1,5 +1,5 @@
- /******************************************************************************
-* Stored Procedure : MASA$ExtractProcedure
+/******************************************************************************
+* Stored Procedure : LIB$CMP_ExtractTrigger
 *
 * Date    : 2018-06-29
 * Author  : Jaroslav Kejnar
@@ -8,7 +8,11 @@
 *
 * Revision History
 * ================
-* 2020-04-30 S.Skopalik - Fixed too many spaces in trigger comments 
+* 2020-04-30 S.Skopalik  - Fixed too many spaces in trigger comments
+* 2022-11-22 S.Skopalik  - Added possibility to update table records with empty trigger
+*                          in replication mode, add TRIM for improve output quality
+* 2023-04-10 S.Skopalik  - Fixed Transaction roll back trigger extraction
+* 2023-05-15 S.Skopalik  - Fixed missing space before ON ... triggers
 ******************************************************************************/
 SET TERM ^;
 
@@ -35,13 +39,13 @@ BEGIN
   -- Extract trigger header
   DDL = 'CREATE OR ALTER TRIGGER '|| TRIM(TriggerName);
   SELECT RDB$Trigger_Type, RDB$Trigger_Inactive, RDB$Trigger_Sequence FROM RDB$Triggers WHERE RDB$Trigger_Name = :TriggerName
-    INTO :trigger_type, :trigger_inactive, :trigger_sequence;
-  IF(trigger_type IS NULL) THEN EXCEPTION LIB$CMP_Exception 'Trigger ''' || :TriggerName || ''' not found.';
+    INTO trigger_type, trigger_inactive, trigger_sequence;
+  IF(trigger_type IS NULL) THEN EXCEPTION LIB$CMP_Exception 'Trigger ''' || TRIM(TriggerName) || ''' not found.';
   IF(trigger_inactive = 1) THEN
     DDL = DDL || ' INACTIVE ';
-  IF(trigger_type IN (8192, 8193, 8194, 8195)) THEN
-    DDL = DDL || (SELECT TriggerType FROM LIB$CMP_GetTriggerType(:trigger_type));
-  ELSE
+  IF(trigger_type IN (8192, 8193, 8194, 8195, 8196)) THEN
+    DDL = DDL || ' ' || (SELECT TriggerType FROM LIB$CMP_GetTriggerType(:trigger_type));
+   ELSE
      DDL = DDL || ' FOR ' || (SELECT TRIM(RDB$Relation_Name) FROM RDB$Triggers WHERE RDB$Trigger_Name = :TriggerName) || ' ' || (SELECT TriggerType FROM LIB$CMP_GetTriggerType(:trigger_type));
   IF(trigger_sequence > 0) THEN
     DDL = DDL || ' POSITION ' || trigger_sequence;
@@ -53,10 +57,14 @@ BEGIN
   IF(EmptyBody = 0)THEN BEGIN
     SELECT RDB$TRIGGER_SOURCE, RDB$DESCRIPTION FROM RDB$Triggers WHERE RDB$Trigger_Name = :TriggerName
         INTO :Source, :dsc;
-    DDL = DDL || Source;
+    DDL = DDL || TRIM(Source);
   END
   ELSE
-    DDL = DDL || 'AS' || CRLF || 'BEGIN' || CRLF || ' EXCEPTION LIB$CMP_Exception ''Trigger '  || :TriggerName || ' is not implemented'';' || CRLF || 'END';
+    DDL = DDL || 'AS' || CRLF || 
+    'BEGIN' || CRLF ||
+    '  IF(Rdb$Get_Context(''USER_SESSION'',''DatabaseReplicationFlag'') IS NOT NULL) THEN EXIT;' || CRLF || 
+    '  EXCEPTION LIB$CMP_Exception ''Trigger '  || TRIM(TriggerName) || ' is not implemented'';' || CRLF || 
+    'END';
   IsBody = 1;
   SUSPEND;
   IsBody = 0;
@@ -76,9 +84,9 @@ BEGIN
   isDrop = 0;
 
   -- Extract trigger comment
-  IF(:dsc IS NOT NULL)THEN BEGIN
+  IF(dsc IS NOT NULL)THEN BEGIN
     IsComment = 1;
-    DDL = 'COMMENT ON TRIGGER ' || TRIM(:TriggerName) || ' IS ''' || :dsc || '''';
+    DDL = 'COMMENT ON TRIGGER ' || TRIM(TriggerName) || ' IS ''' || dsc || '''';
     SUSPEND;
   END
   IsComment = 0;

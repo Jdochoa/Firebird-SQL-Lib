@@ -9,9 +9,10 @@
 * Revision History
 * ================
 * 2020-11-01 - S.Skopalik    In case of dependency then empty procedure bodies
+* 2022-11-20 - S.Skopalik    Add isDML flag to distinguish between DDL and DML statements, extend SQL length
+* 2022-11-21 - S.Skopalik    Add support to empty triggers bodies
 ******************************************************************************/
 
--- Altering support procedures
 SET TERM ^;
 
 CREATE OR ALTER PROCEDURE LIB$DDL_ChangeDataType(
@@ -21,7 +22,8 @@ CREATE OR ALTER PROCEDURE LIB$DDL_ChangeDataType(
   Exe            Lib$BooleanF DEFAULT 0,
   DropDependency Lib$BooleanF DEFAULT 0
 )RETURNS(
-  SQL VARCHAR(512)
+  SQL    LIB$LargeText,
+  isDML  Lib$BooleanF
 )
 AS
 DECLARE tName VARCHAR(128);
@@ -32,13 +34,20 @@ DECLARE isRep SMALLINT;  -- Flag that replication flag is already sets
 DECLARE D_Name VARCHAR(128);
 DECLARE D_Type VARCHAR(128); 
 BEGIN
+  isDML = 0;
   IF(DropDependency>0)THEN BEGIN
     FOR SELECT T.rdb$Type_Name, D.rdb$Dependent_Name FROM RDB$Dependencies D, RDB$Types T
       WHERE D.rdb$depended_on_name = :RelationName AND D.rdb$field_name = :FieldName
       AND T.rdb$Field_Name = 'RDB$OBJECT_TYPE' AND T.rdb$Type = D.Rdb$Dependent_Type
       INTO D_Type, D_Name DO BEGIN
+      SQL = NULL;
       IF(D_Type = 'PROCEDURE')THEN BEGIN   -- Empty procedures bodies
-        SQL = (SELECT DDL FROM Lib$Cmp_Extractprocedure(:D_Name, 1) WHERE IsBody = 1);
+        SQL = (SELECT DDL FROM Lib$Cmp_Extractprocedure(:D_Name, 1) WHERE IsBody = 1);      
+      END
+      IF(D_Type = 'TRIGGER')THEN BEGIN   -- Empty triggers bodies
+        SQL = (SELECT DDL FROM LIB$CMP_ExtractTrigger(:D_Name, 1) WHERE IsBody = 1);
+      END
+      IF(SQL IS NOT NULL)THEN BEGIN
         SUSPEND;
         IF(Exe>0)THEN BEGIN
           EXECUTE STATEMENT SQL WITH AUTONOMOUS TRANSACTION;
@@ -53,9 +62,11 @@ BEGIN
   SQL = 'ALTER TABLE '||TRIM(RelationName)||' ADD ' || TRIM(FieldName) || ' ' || NewDataType;
   SUSPEND;
   sql2 = SQL;
+  isDML = 1;
   SQL = 'UPDATE '||TRIM(RelationName)||' SET ' || FieldName || ' = ' || tName;
   SUSPEND;
   sql3 = SQL;
+  isDML = 0;
   SQL = 'ALTER TABLE ' || TRIM(RelationName) || ' DROP ' || tName;
   SUSPEND;
   IF(Exe>0)THEN BEGIN

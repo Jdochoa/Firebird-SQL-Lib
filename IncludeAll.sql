@@ -33,9 +33,11 @@ COMMIT;
 -- IBReplicator
 INPUT IBReplicator\REPL$DBConnect.sql;
 INPUT IBReplicator\REPL$SetCurrentDBNo.sql;
+INPUT IBReplicator\REPL$WaitForRound.sql;
 COMMIT;
 INPUT IBReplicator\REPL$DDL.sql;
 COMMIT;
+INPUT IBReplicator\REPL$DDL_ChangeDataType.sql;
 INPUT IBReplicator\REPL$DDL_DropForeignKey.sql;
 INPUT IBReplicator\REPL$DDL_DropPrimaryKey.sql;
 INPUT IBReplicator\REPL$DDL_DropUnq.sql;
@@ -47,5 +49,6 @@ INPUT Comparer\LIB$CMP_Domains.sql;
 INPUT Comparer\LIB$CMP_Privileges.sql;
 INPUT Comparer\LIB$CMP_Procedures.sql;
 INPUT Comparer\LIB$CMP_Tables.sql;
+INPUT Comparer\LIB$CMP_Triggers.sql;
 
 COMMIT;
